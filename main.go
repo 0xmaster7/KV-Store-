@@ -40,12 +40,27 @@ func PUT(key1 string, value string) {
 	}
 }
 
-func GET(key string) {
+func GET(key1 string) {
+	hashed_key := hash(key1)
+	bucket := hashed_key % BUCKET_SIZE
 
+	for index, entry := range table[bucket] {
+		if entry.key == key1 {
+			fmt.Printf("Value is = %s\n", table[bucket][index].val)
+		}
+	}
 }
 
-func DELETE(key string) {
+func DELETE(key1 string) {
+	hashed_key := hash(key1)
+	bucket := hashed_key % BUCKET_SIZE
 
+	for index, entry := range table[bucket] {
+		if entry.key == key1 {
+			table[bucket] = append(table[bucket][:index], table[bucket][index+1:]...)
+			fmt.Printf("Value is = %s\n", table[bucket][index].val)
+		}
+	}
 }
 func main() {
 	fmt.Println("===============================================")
