@@ -66,7 +66,9 @@ func DELETE(key1 string) {
 			table[bucket] = append(table[bucket][:index], table[bucket][index+1:]...)
 			found = 0
 			ENTRIES--
-			fmt.Printf("Value is = %s\n", table[bucket][index].val)
+			//fmt.Printf("Value is = %s\n", table[bucket][index].val) cant do thisi cus after line 66 index may point to a diff thing
+			fmt.Printf("Value is = %s\n", entry.val)
+			break
 		}
 	}
 	if found == 0 {
@@ -116,7 +118,43 @@ func rebuild(file *os.File) {
 			DELETE(key)
 		}
 	}
+}
 
+func write_compaction(file *os.File, table [][]Entry) *os.File {
+	//table is [][]ENtry type
+	file1, err := os.OpenFile(
+		"new_data.log",
+		os.O_TRUNC|os.O_RDWR|os.O_CREATE, //truncation mode - clear all data b4 opening it, create if not exist, read write mode
+		0644,                             //normal permissions
+	)
+
+	if err != nil {
+		fmt.Println("error openning file!")
+		return nil
+	}
+	for _, bucket := range table {
+		for _, entry := range bucket {
+			file1.WriteString("PUT " + entry.key + " " + entry.val + "\n")
+		}
+	}
+
+	file1.Close()
+	file.Close()
+
+	os.Rename("new_data.log", "data.log")
+
+	file, err = os.OpenFile(
+		"data.log",
+		os.O_APPEND|os.O_RDWR,
+		0644,
+	)
+
+	if err != nil {
+		fmt.Println("error reopening data.log!")
+		return nil
+	}
+
+	return file
 }
 func main() {
 
@@ -131,7 +169,6 @@ func main() {
 		return
 	}
 
-	defer file.Close()
 	rebuild(file)
 
 	fmt.Println("===============================================")
@@ -155,17 +192,16 @@ func main() {
 
 	var n int
 
-	fmt.Scan(&n)
-
 	for {
+		fmt.Scan(&n)
 		if n == 1 {
 			var a, b string
 			fmt.Println("Enter key: ")
 			fmt.Scan(&a)
 			fmt.Println("Enter value: ")
 			fmt.Scan(&b)
-			PUT(a, b)
 			file.WriteString("PUT " + a + " " + b + "\n")
+			PUT(a, b)
 			//fmt.Println("Successfully inserted key and val!")
 		} else if n == 2 {
 			var a string
@@ -178,8 +214,9 @@ func main() {
 			var a string
 			fmt.Println("Enter key: ")
 			fmt.Scan(&a)
-			DELETE(a)
 			file.WriteString("DELETE " + a + "\n")
+			DELETE(a)
+
 		} else if n == 4 {
 			fmt.Println("Successfully exited program")
 			break
@@ -187,4 +224,12 @@ func main() {
 			fmt.Println("Invalid option. Try again!")
 		}
 	}
+
+	file = write_compaction(file, table)
+	if file == nil {
+		fmt.Println("write compaction failed")
+		return
+	}
+
+	defer file.Close()
 }
