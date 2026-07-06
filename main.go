@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"hash/fnv"
+	"os"
+	"strings"
 )
 
 var BUCKET_SIZE = 100
@@ -88,7 +91,49 @@ func resize() {
 		BUCKET_SIZE = NEW_BUCKET_SIZE
 	}
 }
+
+func rebuild(file *os.File) {
+	//rebuilds the has table when u restart the program so that data isnt lost
+
+	scanner := bufio.NewScanner(file) //obj
+
+	for scanner.Scan() {
+		line := scanner.Text()        //gets each line
+		parts := strings.Fields(line) //each word of the line (split by spaces)
+		var operation, key, val string
+		if len(parts) == 3 {
+			operation = parts[0]
+			key = parts[1]
+			val = parts[2]
+
+		} else if len(parts) == 2 {
+			operation = parts[0]
+			key = parts[1]
+		}
+		if operation == "PUT" {
+			PUT(key, val)
+		} else if operation == "DELETE" {
+			DELETE(key)
+		}
+	}
+
+}
 func main() {
+
+	file, err := os.OpenFile(
+		"data.log",
+		os.O_APPEND|os.O_RDWR|os.O_CREATE, //append mode, create if not exist, read write mode
+		0644,                              //normal permissions
+	)
+
+	if err != nil {
+		fmt.Println("error openning file!")
+		return
+	}
+
+	defer file.Close()
+	rebuild(file)
+
 	fmt.Println("===============================================")
 	fmt.Println("   Welcome to the Basic Key-Value Store in Go")
 	fmt.Println("===============================================")
@@ -112,25 +157,34 @@ func main() {
 
 	fmt.Scan(&n)
 
-	if n == 1 {
-		var a, b string
-		fmt.Println("Enter key: ")
-		fmt.Scan(&a)
-		fmt.Println("Enter value: ")
-		fmt.Scan(&b)
-		PUT(a, b)
-		//fmt.Println("Successfully inserted key and val!")
-	} else if n == 2 {
-		var a string
-		fmt.Println("Enter key: ")
-		fmt.Scan(&a)
-		GET(a)
-		fmt.Println("Required key is - ")
-	} else if n == 3 {
-		var a string
-		fmt.Println("Enter key: ")
-		fmt.Scan(&a)
-		DELETE(a)
-		fmt.Println("Successfully deleted key !")
+	for {
+		if n == 1 {
+			var a, b string
+			fmt.Println("Enter key: ")
+			fmt.Scan(&a)
+			fmt.Println("Enter value: ")
+			fmt.Scan(&b)
+			PUT(a, b)
+			file.WriteString("PUT " + a + " " + b + "\n")
+			//fmt.Println("Successfully inserted key and val!")
+		} else if n == 2 {
+			var a string
+			fmt.Println("Enter key: ")
+			fmt.Scan(&a)
+			GET(a)
+			fmt.Println("Required key is - ")
+
+		} else if n == 3 {
+			var a string
+			fmt.Println("Enter key: ")
+			fmt.Scan(&a)
+			DELETE(a)
+			file.WriteString("DELETE " + a + "\n")
+		} else if n == 4 {
+			fmt.Println("Successfully exited program")
+			break
+		} else {
+			fmt.Println("Invalid option. Try again!")
+		}
 	}
 }
