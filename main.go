@@ -70,12 +70,36 @@ func PUT(key1 string, value string) {
 func GET(key1 string) {
 	hashed_key := hash(key1)
 	bucket := int(hashed_key % uint64(BUCKET_SIZE))
-
 	for index, entry := range table[bucket] {
 		if entry.key == key1 {
 			fmt.Printf("Value is = %s\n", table[bucket][index].val)
+			return
 		}
 	}
+
+	for i := SSTable_index - 1; i >= 1; i-- {
+		file_name := fmt.Sprintf("sstable_%d.log", i)
+
+		sstable_file, err := os.Open(file_name)
+		if err != nil {
+			fmt.Println("Error opening sstable_file")
+			continue //cus if error then it skips this ssable file and goes to the next sstable file return gets out of func immediately
+		}
+		scanner := bufio.NewScanner(sstable_file)
+
+		for scanner.Scan() {
+			line := scanner.Text()
+			parts := strings.Fields(line)
+
+			if parts[1] == key1 && len(parts) == 3 {
+				fmt.Printf("Value is = %s\n", parts[2])
+				sstable_file.Close()
+				return
+			}
+		}
+		sstable_file.Close()
+	}
+	fmt.Println("Key not found")
 }
 
 func DELETE(key1 string) {
