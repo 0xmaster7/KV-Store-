@@ -6,6 +6,7 @@ import (
 	"hash/fnv"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -28,6 +29,23 @@ func hash(key string) uint64 {
 	return hash_obj.Sum64()
 }
 
+func get_sstable_index() {
+	files, err := os.ReadDir(".")
+	if err != nil {
+		fmt.Println("error loading dir files")
+	}
+	mx := 0
+	for _, file := range files {
+		if strings.HasPrefix(file.Name(), "sstable_") && strings.HasSuffix(file.Name(), ".log") {
+			res := strings.TrimPrefix(file.Name(), "sstable_")
+			res = strings.TrimSuffix(res, ".log")
+			num, _ := strconv.Atoi(res)
+			mx = max(num, mx)
+		}
+	}
+	SSTable_index = mx + 1
+
+}
 func PUT(key1 string, value string) {
 	hashed_key := hash(key1)
 	bucket := int(hashed_key % uint64(BUCKET_SIZE))
@@ -160,7 +178,7 @@ func rebuild(file *os.File) {
 // 	return file
 // }
 
-func sstable(file *os.File, table [][]Entry) {
+func sstable(file *os.File) {
 	if WAL_ENTRIES < 1000 {
 		return
 	}
@@ -214,9 +232,9 @@ func sstable(file *os.File, table [][]Entry) {
 
 	fmt.Println("MemTable successfully flushed to", file_name)
 }
-}
 
 func main() {
+	get_sstable_index()
 
 	file, err := os.OpenFile(
 		"data.log",
@@ -228,7 +246,7 @@ func main() {
 		fmt.Println("error openning file!")
 		return
 	}
-
+	defer file.Close()
 	rebuild(file)
 
 	fmt.Println("===============================================")
@@ -261,7 +279,9 @@ func main() {
 			fmt.Println("Enter value: ")
 			fmt.Scan(&b)
 			file.WriteString("PUT " + a + " " + b + "\n")
+			WAL_ENTRIES++
 			PUT(a, b)
+			sstable(file)
 			//fmt.Println("Successfully inserted key and val!")
 		} else if n == 2 {
 			var a string
@@ -275,7 +295,9 @@ func main() {
 			fmt.Println("Enter key: ")
 			fmt.Scan(&a)
 			file.WriteString("DELETE " + a + "\n")
+			WAL_ENTRIES++
 			DELETE(a)
+			sstable(file)
 
 		} else if n == 4 {
 			fmt.Println("Successfully exited program")
@@ -291,5 +313,4 @@ func main() {
 	// 	return
 	// }
 
-	defer file.Close()
 }
