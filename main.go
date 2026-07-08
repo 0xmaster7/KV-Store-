@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"hash/fnv"
+	"io"
 	"os"
 	"sort"
 	"strconv"
@@ -19,6 +20,11 @@ var SSTable_index = 1
 type Entry struct {
 	key string
 	val string
+}
+
+type IndexEntry struct {
+	key    string
+	offset int64
 }
 
 var table = make([][]Entry, BUCKET_SIZE)
@@ -86,20 +92,40 @@ func GET(key1 string) {
 			continue //cus if error then it skips this ssable file and goes to the next sstable file return gets out of func immediately
 		}
 		scanner := bufio.NewScanner(sstable_file)
-
+		list := make([]Entry, 0)
 		for scanner.Scan() {
 			line := scanner.Text()
 			parts := strings.Fields(line)
 
-			if parts[1] == key1 && len(parts) == 3 {
-				fmt.Printf("Value is = %s\n", parts[2])
-				sstable_file.Close()
-				return
+			if len(parts) == 3 {
+				list = append(list, Entry{
+					key: parts[1],
+					val: parts[2],
+				})
 			}
 		}
 		sstable_file.Close()
+
+		//binary search cus keys r sorted in sstables
+		//still O(n) cus n files u have to go through so overal O(n)
+		left := 0
+		right := len(list) - 1
+
+		for left <= right {
+			mid := (left + right) / 2
+
+			if list[mid].key == key1 {
+				fmt.Printf("Value is = %s\n", list[mid].val)
+				return
+			} else if list[mid].key < key1 {
+				left = mid + 1
+			} else {
+				right = mid - 1
+			}
+		}
 	}
-	fmt.Println("Key not found")
+	fmt.Println("key not found")
+
 }
 
 func DELETE(key1 string) {
@@ -227,7 +253,27 @@ func sstable(file *os.File) {
 		fmt.Println("Error creating sstable file")
 		return
 	}
-	for _, entry := range entries {
+
+	file_name1 := fmt.Sprintf("sstable_%d.index", SSTable_index)
+	file2, err := os.OpenFile(
+		file_name1,
+		os.O_TRUNC|os.O_CREATE|os.O_RDWR,
+		0644,
+	)
+	if err != nil {
+		fmt.Println("Error creating sstabl.index file for sparse indexing")
+		return
+	}
+	for index, entry := range entries {
+
+		if index%10 == 0 {
+			offset, err := file1.Seek(0, io.SeekCurrent)
+			if err != nil {
+				fmt.Println("error finding offset for sstable.index file")
+				return
+			}
+			_, err = file2.WriteString(fmt.Sprintf("%s %d\n", entry.key, offset))
+		}
 		_, err := file1.WriteString("PUT " + entry.key + " " + entry.val + "\n")
 
 		if err != nil {
@@ -236,12 +282,17 @@ func sstable(file *os.File) {
 		}
 	}
 	err = file1.Sync() //makes sure data is flushed
-
+	err1 = file2.Sync()
+	if err1 != nil {
+		fmt.Println("error flushing data to sstable.index")
+		return
+	}
 	if err != nil {
 		fmt.Println("error flushing data to sstable")
 		return
 	}
 	file1.Close()
+	file2.Close()
 	err = file.Truncate(0) //truncates WAL file to empty it
 	//0 means set file size to 0 bytes
 	if err != nil {
