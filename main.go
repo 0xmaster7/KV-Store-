@@ -262,6 +262,7 @@ func sstable(file *os.File) {
 	)
 	if err != nil {
 		fmt.Println("Error creating sstabl.index file for sparse indexing")
+		file2.Close()
 		return
 	}
 	for index, entry := range entries {
@@ -270,9 +271,17 @@ func sstable(file *os.File) {
 			offset, err := file1.Seek(0, io.SeekCurrent)
 			if err != nil {
 				fmt.Println("error finding offset for sstable.index file")
+				file1.Close()
+				file2.Close()
 				return
 			}
 			_, err = file2.WriteString(fmt.Sprintf("%s %d\n", entry.key, offset))
+			if err != nil {
+				fmt.Println("error writing to sstable.index")
+				file1.Close()
+				file2.Close()
+				return
+			}
 		}
 		_, err := file1.WriteString("PUT " + entry.key + " " + entry.val + "\n")
 
@@ -282,13 +291,13 @@ func sstable(file *os.File) {
 		}
 	}
 	err = file1.Sync() //makes sure data is flushed
-	err1 = file2.Sync()
-	if err1 != nil {
-		fmt.Println("error flushing data to sstable.index")
-		return
-	}
 	if err != nil {
 		fmt.Println("error flushing data to sstable")
+		return
+	}
+	err1 := file2.Sync()
+	if err1 != nil {
+		fmt.Println("error flushing data to sstable.index")
 		return
 	}
 	file1.Close()
