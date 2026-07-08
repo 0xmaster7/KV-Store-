@@ -5,11 +5,14 @@ import (
 	"fmt"
 	"hash/fnv"
 	"os"
+	"sort"
 	"strings"
 )
 
 var BUCKET_SIZE = 100
 var ENTRIES = 0
+var WAL_ENTRIES = 0
+var SSTable_index = 1
 
 // type <name of struct> struct
 type Entry struct {
@@ -120,42 +123,99 @@ func rebuild(file *os.File) {
 	}
 }
 
-func write_compaction(file *os.File, table [][]Entry) *os.File {
-	//table is [][]ENtry type
-	file1, err := os.OpenFile(
-		"new_data.log",
-		os.O_TRUNC|os.O_RDWR|os.O_CREATE, //truncation mode - clear all data b4 opening it, create if not exist, read write mode
-		0644,                             //normal permissions
-	)
+// func write_compaction(file *os.File, table [][]Entry) *os.File {
+// 	//table is [][]ENtry type
+// 	file1, err := os.OpenFile(
+// 		"new_data.log",
+// 		os.O_TRUNC|os.O_RDWR|os.O_CREATE, //truncation mode - clear all data b4 opening it, create if not exist, read write mode
+// 		0644,                             //normal permissions
+// 	)
 
-	if err != nil {
-		fmt.Println("error openning file!")
-		return nil
+// 	if err != nil {
+// 		fmt.Println("error openning file!")
+// 		return nil
+// 	}
+// 	for _, bucket := range table {
+// 		for _, entry := range bucket {
+// 			file1.WriteString("PUT " + entry.key + " " + entry.val + "\n")
+// 		}
+// 	}
+
+// 	file1.Close()
+// 	file.Close()
+
+// 	os.Rename("new_data.log", "data.log")
+
+// 	file, err = os.OpenFile(
+// 		"data.log",
+// 		os.O_APPEND|os.O_RDWR,
+// 		0644,
+// 	)
+
+// 	if err != nil {
+// 		fmt.Println("error reopening data.log!")
+// 		return nil
+// 	}
+
+// 	return file
+// }
+
+func sstable(file *os.File, table [][]Entry) {
+	if WAL_ENTRIES < 1000 {
+		return
 	}
+
+	var entries []Entry
 	for _, bucket := range table {
 		for _, entry := range bucket {
-			file1.WriteString("PUT " + entry.key + " " + entry.val + "\n")
+			entries = append(entries, entry)
 		}
 	}
+	sort.Slice(entries, func(i int, j int) bool {
+		return entries[i].key < entries[j].key
+	})
 
-	file1.Close()
-	file.Close()
-
-	os.Rename("new_data.log", "data.log")
-
-	file, err = os.OpenFile(
-		"data.log",
-		os.O_APPEND|os.O_RDWR,
+	file_name := fmt.Sprintf("sstable_%d.log", SSTable_index)
+	file1, err := os.OpenFile(
+		file_name,
+		os.O_TRUNC|os.O_CREATE|os.O_RDWR,
 		0644,
 	)
+	if err != nil {
+		fmt.Println("Error creating sstable file")
+		return
+	}
+	for _, entry := range entries {
+		_, err := file1.WriteString("PUT " + entry.key + " " + entry.val + "\n")
+
+		if err != nil {
+			fmt.Println("Error writing to sstable")
+			return
+		}
+	}
+	err = file1.Sync() //makes sure data is flushed
 
 	if err != nil {
-		fmt.Println("error reopening data.log!")
-		return nil
+		fmt.Println("error flushing data to sstable")
+		return
 	}
+	file1.Close()
+	err = file.Truncate(0) //truncates WAL file to empty it
+	//0 means set file size to 0 bytes
+	if err != nil {
+		fmt.Println("error truncating WAL!")
+		return
+	}
+	file.Seek(0, 0) //move cursorback to start in WAL
+	table = make([][]Entry, BUCKET_SIZE)
+	SSTable_index++
+	ENTRIES = 0
+	WAL_ENTRIES = 0
 
-	return file
+	fmt.Println("MemTable successfully flushed to", file_name)
 }
+}
+
 func main() {
 
 	file, err := os.OpenFile(
@@ -225,11 +285,11 @@ func main() {
 		}
 	}
 
-	file = write_compaction(file, table)
-	if file == nil {
-		fmt.Println("write compaction failed")
-		return
-	}
+	// file = write_compaction(file, table)
+	// if file == nil {
+	// 	fmt.Println("write compaction failed")
+	// 	return
+	// }
 
 	defer file.Close()
 }
