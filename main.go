@@ -73,6 +73,8 @@ func PUT(key1 string, value string) {
 	}
 }
 
+// binary search cus keys r sorted in sstables
+// now using sparse indexing so no more O(n) for searching through sstables MUCH more efficient
 func GET(key1 string) {
 	hashed_key := hash(key1)
 	bucket := int(hashed_key % uint64(BUCKET_SIZE))
@@ -84,7 +86,7 @@ func GET(key1 string) {
 	}
 
 	for i := SSTable_index - 1; i >= 1; i-- {
-		file_name := fmt.Sprintf("sstable_%d.log", i)
+		file_name := fmt.Sprintf("sstable_%d.index", i)
 
 		sstable_file, err := os.Open(file_name)
 		if err != nil {
@@ -92,37 +94,75 @@ func GET(key1 string) {
 			continue //cus if error then it skips this ssable file and goes to the next sstable file return gets out of func immediately
 		}
 		scanner := bufio.NewScanner(sstable_file)
-		list := make([]Entry, 0)
+		list := make([]IndexEntry, 0)
 		for scanner.Scan() {
 			line := scanner.Text()
 			parts := strings.Fields(line)
 
-			if len(parts) == 3 {
-				list = append(list, Entry{
-					key: parts[1],
-					val: parts[2],
+			if len(parts) == 2 {
+				num, _ := strconv.ParseInt(parts[1], 10, 64) //parts[1] is str in base 10 as 64 bit int
+				list = append(list, IndexEntry{
+					key:    parts[0],
+					offset: num,
 				})
 			}
 		}
 		sstable_file.Close()
 
-		//binary search cus keys r sorted in sstables
-		//still O(n) cus n files u have to go through so overal O(n)
 		left := 0
 		right := len(list) - 1
+		best := -1 //variable to keep track of closest offse
 
 		for left <= right {
 			mid := (left + right) / 2
 
-			if list[mid].key == key1 {
-				fmt.Printf("Value is = %s\n", list[mid].val)
-				return
-			} else if list[mid].key < key1 {
+			if list[mid].key <= key1 {
+				best = mid
 				left = mid + 1
+
 			} else {
 				right = mid - 1
 			}
 		}
+
+		if best == -1 {
+			continue
+		}
+		offset := list[best].offset
+		file_name2 := fmt.Sprintf("sstable_%d.log", i)
+
+		sstable_log_file, err := os.Open(file_name2)
+
+		if err != nil {
+			fmt.Println("Error opening sstable log file")
+			continue
+		}
+		_, err = sstable_log_file.Seek(offset, io.SeekStart)
+
+		if err != nil {
+			fmt.Println("Error seeking to offset")
+			continue
+		}
+
+		scanner1 := bufio.NewScanner(sstable_log_file)
+		for scanner1.Scan() {
+			line := scanner1.Text()
+			parts := strings.Fields(line)
+
+			if len(parts) == 3 {
+				if parts[1] == key1 {
+					fmt.Printf("Value is %s\n", parts[2])
+					sstable_log_file.Close()
+					return
+				} else if parts[1] > key1 {
+					//parts[1] cannot be > key1 cus the log file is sorted
+					break
+					//key dosent exist so break
+				}
+			}
+		}
+		sstable_log_file.Close()
+
 	}
 	fmt.Println("key not found")
 
