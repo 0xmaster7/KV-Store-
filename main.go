@@ -141,6 +141,7 @@ func GET(key1 string) {
 
 		if err != nil {
 			fmt.Println("Error seeking to offset")
+			sstable_log_file.Close()
 			continue
 		}
 
@@ -225,8 +226,10 @@ func rebuild(file *os.File) {
 		}
 		if operation == "PUT" {
 			PUT(key, val)
+			WAL_ENTRIES++
 		} else if operation == "DELETE" {
 			DELETE(key)
+			WAL_ENTRIES++
 		}
 	}
 }
@@ -302,7 +305,7 @@ func sstable(file *os.File) {
 	)
 	if err != nil {
 		fmt.Println("Error creating sstabl.index file for sparse indexing")
-		file2.Close()
+		file1.Close()
 		return
 	}
 	for index, entry := range entries {
