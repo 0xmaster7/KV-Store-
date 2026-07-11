@@ -2,6 +2,8 @@
 
 GoLSM is a lightweight persistent key-value store written from scratch in Go, built to explore the internals of **log-structured merge (LSM) storage engines**.
 
+I wrote up the design and build process in more detail here: [Stratum: A KV Store in Go](https://stratum.hashnode.dev/stratum-a-kv-store-in-go)
+
 Instead of keeping the whole database in memory, GoLSM keeps only recent writes in RAM and persists everything else to disk. It's an educational implementation — not for production — meant to demonstrate the core ideas behind systems like LevelDB/RocksDB/Cassandra's storage layer.
 
 ---
